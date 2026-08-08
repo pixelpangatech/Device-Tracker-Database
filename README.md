@@ -1,68 +1,39 @@
-# Device Tracker Database
+# TechVault (v5.0)
 
-Device Tracker Database is a premium, web-based inventory management system designed to track physical devices (like Androids and iPhones) allocated to employees. It features a modern Glassmorphism UI, a secure Admin Panel, and real-time client-side filtering.
+TechVault is a modern, responsive, and secure device inventory management system designed to track internal assets (Phones, Laptops, SIM cards, etc.) across testing floors or within an organization. 
 
-## 🚀 Features
+Featuring a stunning **Glassmorphism** user interface, TechVault makes assigning, tracking, and returning devices a seamless experience.
 
-*   **Premium UI/UX:** Built with a stunning Glassmorphic design, subtle gradients, and modern typography (Plus Jakarta Sans).
-*   **Role-Based Access:** 
-    *   **Admin Mode:** Full control over master devices, master users, and real-time logs.
-    *   **Employee Mode:** Secure login with mandatory password-change enforcement.
-    *   **Guest Mode:** View-only access to current device allocations on the dashboard.
-*   **Auto-Initializing Database:** Zero-configuration SQLite database (`inventory.sqlite`). Tables and default admin accounts are created automatically on the first run.
-*   **Responsive Design:** Fully mobile-compatible tables, headers, and filters using Bootstrap 5 and custom flexbox layouts.
-*   **Advanced Filtering & Sorting:** Real-time client-side search, status filters (Issued/Permanent/Returned), device type filters, and column sorting.
+## ✨ Key Features
+- **Live Dashboard:** Real-time metrics on available vs. allocated devices.
+- **Master Lists:** Manage inventory categories, devices, SIM cards, and registered employees.
+- **One-Click Allocations:** Easily assign or return devices with automated timestamp tracking.
+- **Automated Welcome Emails:** Sends auto-generated HTML emails with login credentials to new employees via custom SMTP setup.
+- **Smart Database Initialization:** Plug-and-play database setup. Automatically creates tables for blank databases on shared hosting (cPanel) or local environments (XAMPP).
+- **Glassmorphism UI:** Premium aesthetic with blurred backgrounds, dark themes, and flat CSS icons.
 
-## 🛠️ Technology Stack
+## 🚀 Quick Setup (Installation)
+1. **Clone the repository:** 
+   ```bash
+   git clone https://github.com/YOUR_USERNAME/TechVault.git
+   ```
+2. **Move to Server Directory:** Place the folder inside your web server directory (e.g., `C:/xampp/htdocs/TechVault/`).
+3. **Configure Database:**
+   - Open `db.php`.
+   - Update `$host`, `$username`, `$password`, and `$db_name` with your MySQL credentials.
+   - *Note: If connecting to a live server with restricted permissions, create a blank database first. TechVault will auto-create the necessary tables.*
+4. **Launch:** Open `http://localhost/TechVault` in your browser.
 
-*   **Frontend:** HTML5, CSS3, Vanilla JavaScript, Bootstrap 5, FontAwesome 6.
-*   **Backend:** PHP 8+
-*   **Database:** SQLite (via PDO)
+## 📧 Email Settings
+No `sendmail` configuration is required! 
+1. Log in to the system.
+2. Click your profile dropdown in the top-right corner.
+3. Select **Email Settings**.
+4. Enter your SMTP details (e.g., `smtp.gmail.com`, Port `587`, your email, and App Password).
+5. TechVault's custom `SimpleSMTP` engine will handle the rest.
 
-## 📦 Installation & Setup
-
-1.  **Prerequisites:** 
-    *   A local web server environment like XAMPP, WAMP, or MAMP.
-    *   PHP 8.0 or higher.
-2.  **Clone the Repository:**
-    Place the project folder (`phone_inventory`) into your server's root directory (e.g., `htdocs` for XAMPP).
-3.  **Run the Application:**
-    Navigate to `http://localhost/phone_inventory/` in your web browser.
-4.  **Database Auto-Setup:**
-    The system will automatically create `inventory.sqlite` and seed it with the necessary tables (`master_users`, `master_devices`, `devices`) upon first access.
-
-## 🔐 Default Credentials
-
-### Admin Login
-*   **Username:** admin
-*   **Password:** adminpassword123
-*(Note: Admin credentials are securely stored and validated via `admin_credentials.json`)*
-
-### Employee Login (Default)
-*   **Password:** 123456
-*(Note: Employees are forced to change this default password upon their first login before they can access any authenticated routes).*
-
-## 📖 How to Use
-
-### For Admins
-1. Navigate to `/login.php` and log in with admin credentials.
-2. Go to the **Admin Panel** (`admin.php`).
-3. **Manage Masters:** Add or remove Employee Names (Master Users) and Device Names (Master Devices).
-4. **Allocate Devices:** Use the central form to allocate a device to an employee. Select the status (Issued, Permanent, Returned).
-5. **View Logs:** Track all check-ins, check-outs, and modifications in the "Action Logs" table. You can sort by Time, Assigned To, and Status.
-
-### For Employees
-1. Navigate to the Dashboard.
-2. If logging in to change a password, click the User Profile icon -> Login.
-3. If it's the first time logging in, you will be redirected to `change_password.php`.
-4. You can also click **"Continue as Guest"** to view the current allocations without making changes.
-
-## 🛡️ Security Measures
-*   **Bcrypt Hashing:** All passwords are mathematically hashed using `PASSWORD_DEFAULT` (Bcrypt).
-*   **SQL Injection Prevention:** All database queries utilize PDO Prepared Statements.
-*   **Session Hijacking Prevention:** Secure session handling (`session_start()`) checks roles across restricted pages.
-*   **Directory Protection:** Direct access to `db.php` or `header.php` is blocked.
-
-## 📞 Contact & Support
-For any inquiries, support, or further details regarding this project, please contact **PixelPanga Tech** at:
-📧 **Email:** [pixelpangatech@gmail.com](mailto:pixelpangatech@gmail.com)
+## 🔐 Default Admin Account
+Upon the first initialization, the system will create a default administrator account:
+- **Username:** `admin`
+- **Password:** `123456`
+*(Please change this immediately after logging in)*
