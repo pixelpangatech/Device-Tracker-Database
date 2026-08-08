@@ -1,0 +1,10 @@
+- `[x]` Database Updates
+  - `[x]` Create `smtp_settings` table in `db.php`
+  - `[x]` Insert a default record if table is empty
+- `[x]` UI Updates
+  - `[x]` Add "Email Settings" option to admin dropdown in `header.php`
+  - `[x]` Create Email Settings modal in `header.php`
+  - `[x]` Handle POST action `save_email_settings` in `admin.php`
+- `[x]` Custom SMTP Mailer
+  - `[x]` Create `libs/SimpleSMTP.php`
+  - `[x]` Update `sendWelcomeEmail` in `db.php` to use `SimpleSMTP` instead of `mail()`
