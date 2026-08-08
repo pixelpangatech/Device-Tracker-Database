@@ -14,7 +14,19 @@ $view_date_dmy = date('d-m-Y', strtotime($view_date_ymd));
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'save_permanent_config') {
+    if ($action === 'save_email_settings') {
+        $smtp_host = $_POST['smtp_host'] ?? '';
+        $smtp_port = $_POST['smtp_port'] ?? 587;
+        $smtp_user = $_POST['smtp_user'] ?? '';
+        $smtp_pass = $_POST['smtp_pass'] ?? '';
+        $redirect_to = $_POST['redirect_to'] ?? 'admin.php';
+        
+        $stmt = $pdo->prepare("UPDATE smtp_settings SET smtp_host = ?, smtp_port = ?, smtp_user = ?, smtp_pass = ?");
+        $stmt->execute([$smtp_host, $smtp_port, $smtp_user, $smtp_pass]);
+        
+        header("Location: " . $redirect_to);
+        exit();
+    } elseif ($action === 'save_permanent_config') {
         $device_id = $_POST['device_id'] ?? '';
         $is_perm = isset($_POST['is_permanent']) ? 1 : 0;
         $assigned_user = $is_perm ? ($_POST['permanent_user'] ?? null) : null;
@@ -90,9 +102,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit();
     } elseif ($action === 'add_master_device') {
         $item_name = trim($_POST['item_name'] ?? '');
+        $category = trim($_POST['category'] ?? '');
+        $country_code = trim($_POST['country_code'] ?? '');
+        
+        if ($category === 'Phone No' && !empty($country_code)) {
+            $item_name = $country_code . ' ' . $item_name;
+        }
+
         if ($item_name) {
-            $stmt = $pdo->prepare("INSERT OR IGNORE INTO master_devices (name) VALUES (?)");
-            $stmt->execute([$item_name]);
+            $stmt = $pdo->prepare("INSERT IGNORE INTO master_devices (name, category) VALUES (?, ?)");
+            $stmt->execute([$item_name, $category]);
         }
         header("Location: admin.php");
         exit();
@@ -100,6 +119,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $id = $_POST['id'] ?? '';
         if ($id) {
             $stmt = $pdo->prepare("DELETE FROM master_devices WHERE id = ?");
+            $stmt->execute([$id]);
+        }
+        header("Location: admin.php");
+        exit();
+    } elseif ($action === 'edit_master_device') {
+        $id = $_POST['id'] ?? '';
+        $item_name = trim($_POST['item_name'] ?? '');
+        $category = trim($_POST['category'] ?? '');
+        $country_code = trim($_POST['country_code'] ?? '');
+        
+        if ($category === 'Phone No' && !empty($country_code)) {
+            $item_name = $country_code . ' ' . $item_name;
+        }
+
+        if ($id && $item_name && $category) {
+            $stmt = $pdo->prepare("UPDATE master_devices SET name = ?, category = ? WHERE id = ?");
+            $stmt->execute([$item_name, $category, $id]);
+        }
+        header("Location: admin.php");
+        exit();
+    } elseif ($action === 'add_master_sim') {
+        $item_name = trim($_POST['item_name'] ?? '');
+        if ($item_name) {
+            $stmt = $pdo->prepare("INSERT INTO master_sims (sim_number) VALUES (?)");
+            $stmt->execute([$item_name]);
+        }
+        header("Location: admin.php");
+        exit();
+    } elseif ($action === 'delete_master_sim') {
+        $id = $_POST['id'] ?? '';
+        if ($id) {
+            $stmt = $pdo->prepare("DELETE FROM master_sims WHERE id = ?");
             $stmt->execute([$id]);
         }
         header("Location: admin.php");
@@ -140,28 +191,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         header("Location: admin.php");
         exit();
+    } elseif ($action === 'toggle_user_role') {
+        $id = $_POST['id'] ?? '';
+        $is_admin = isset($_POST['is_admin']) ? 1 : 0;
+        if ($id) {
+            $stmt = $pdo->prepare("UPDATE master_users SET is_admin = ? WHERE id = ?");
+            $stmt->execute([$is_admin, $id]);
+        }
+        header("Location: admin.php");
+        exit();
     }
 }
 
-// Fetch data for view
-$stmt = $pdo->query("SELECT id, name, is_permanent, permanent_user, sim_no FROM master_devices ORDER BY name ASC");
+// Pagination for master_devices
+$devices_per_page = 10;
+$current_device_page = isset($_GET['device_page']) ? (int) $_GET['device_page'] : 1;
+if ($current_device_page < 1)
+    $current_device_page = 1;
+$device_offset = ($current_device_page - 1) * $devices_per_page;
+
+$total_devices_stmt = $pdo->query("SELECT COUNT(*) FROM master_devices");
+$total_devices = (int) $total_devices_stmt->fetchColumn();
+$total_device_pages = ceil($total_devices / $devices_per_page);
+
+$stmt = $pdo->prepare("SELECT id, name, category, is_permanent, permanent_user, sim_no, last_assigned_to, last_assigned_date FROM master_devices ORDER BY name ASC LIMIT ? OFFSET ?");
+$stmt->bindValue(1, $devices_per_page, PDO::PARAM_INT);
+$stmt->bindValue(2, $device_offset, PDO::PARAM_INT);
+$stmt->execute();
 $master_devices = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Pagination for master_users
-$users_per_page = 10;
-$current_user_page = isset($_GET['user_page']) ? (int) $_GET['user_page'] : 1;
-if ($current_user_page < 1)
-    $current_user_page = 1;
-$user_offset = ($current_user_page - 1) * $users_per_page;
+$stmt = $pdo->query("SELECT id, sim_number FROM master_sims ORDER BY sim_number ASC");
+$master_sims = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-$total_users_stmt = $pdo->query("SELECT COUNT(*) FROM master_users");
-$total_users = (int) $total_users_stmt->fetchColumn();
-$total_user_pages = ceil($total_users / $users_per_page);
-
-$stmt = $pdo->prepare("SELECT id, name, email FROM master_users ORDER BY name ASC LIMIT ? OFFSET ?");
-$stmt->bindValue(1, $users_per_page, PDO::PARAM_INT);
-$stmt->bindValue(2, $user_offset, PDO::PARAM_INT);
-$stmt->execute();
+// Fetch all master_users for permanent device allocation dropdown
+$stmt = $pdo->query("SELECT id, name FROM master_users ORDER BY name ASC");
 $master_users = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 $stmt = $pdo->prepare("SELECT * FROM devices WHERE assigned_date LIKE ? ORDER BY id DESC");
@@ -186,7 +249,8 @@ $allocations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                         <th class="ps-4" style="cursor: pointer;" onclick="sortAdminTable(0)"
                             title="Sort by Device Name">Device Name <i class="fa-solid fa-sort ms-1"
                                 style="opacity: 0.5;"></i></th>
-                        <th style="cursor: pointer;" onclick="sortAdminTable(1)" title="Sort by Permanent Status">
+                        <th>Category</th>
+                        <th style="cursor: pointer;" onclick="sortAdminTable(2)" title="Sort by Permanent Status">
                             Permanent? <i class="fa-solid fa-sort ms-1" style="opacity: 0.5;"></i></th>
                         <th>Assigned User</th>
                         <th>Default SIM</th>
@@ -200,6 +264,9 @@ $allocations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 <input type="hidden" name="action" value="save_permanent_config">
                                 <input type="hidden" name="device_id" value="<?php echo $dev['id']; ?>">
                                 <td class="ps-4 fw-bold text-adaptive"><?php echo htmlspecialchars($dev['name']); ?></td>
+                                <td><span
+                                        class="badge bg-secondary"><?php echo htmlspecialchars($dev['category']); ?></span>
+                                </td>
                                 <td>
                                     <div class="form-check form-switch ms-2">
                                         <input class="form-check-input shadow-none" type="checkbox" name="is_permanent"
@@ -234,102 +301,163 @@ $allocations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     <div class="row">
         <!-- 2. MASTER DEVICES MANAGEMENT -->
-        <div class="col-lg-6">
+        <div class="col-12">
             <div class="glass-card-admin">
-                <div class="card-header-admin"><i class="fa-solid fa-mobile text-cyan-400"
-                        style="color: var(--accent-cyan);"></i> Master Devices List</div>
+                <div class="card-header-admin d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fa-solid fa-mobile text-cyan-400" style="color: var(--accent-cyan);"></i> Master
+                        Devices List
+                    </div>
+                    <input type="text" id="searchMasterDevices" class="form-control-admin form-control-sm w-auto"
+                        placeholder="Search Devices..."
+                        onkeyup="filterTable('searchMasterDevices', 'masterDevicesTable')"
+                        style="font-size: 0.85rem; padding: 4px 10px; font-weight: normal;">
+                </div>
                 <div class="border-bottom border-secondary"
                     style="padding: 30px !important; border-color: var(--dark-border) !important;">
                     <form action="admin.php" method="POST" class="d-flex gap-3">
                         <input type="hidden" name="action" value="add_master_device">
-                        <input type="text" name="item_name" class="form-control-admin w-100"
+                        
+                        <div class="position-relative w-25">
+                            <select name="category" class="form-control-admin w-100 form-select-admin" required style="padding-right: 40px; appearance: none; -webkit-appearance: none;" onchange="togglePhoneValidation(this.value, 'addCountryCodeWrapper', 'addDeviceNameInput')">
+                                <option value="" disabled selected>-- Select Category --</option>
+                                <option value="Android">Android</option>
+                                <option value="iPhone">iPhone</option>
+                                <option value="Laptop">Laptop</option>
+                                <option value="External HD">External HD</option>
+                                <option value="Headphone">Headphone</option>
+                                <option value="Phone No">Phone No</option>
+                                <option value="Other">Other</option>
+                            </select>
+                            <i class="fa-solid fa-caret-down position-absolute"
+                                style="right: 15px; top: 50%; transform: translateY(-50%); color: #06b6d4; font-size: 1.2rem; pointer-events: none;"></i>
+                        </div>
+
+                        <!-- Country Code (Hidden by default) -->
+                        <div class="position-relative" id="addCountryCodeWrapper" style="display: none; width: 120px;">
+                            <select name="country_code" class="form-control-admin w-100 form-select-admin" style="padding-right: 20px; appearance: none; -webkit-appearance: none;">
+                                <option value="+91">🇮🇳 +91 (IN)</option>
+                                <option value="+1">🇺🇸 +1 (US)</option>
+                                <option value="+44">🇬🇧 +44 (UK)</option>
+                                <option value="+971">🇦🇪 +971 (AE)</option>
+                                <option value="+61">🇦🇺 +61 (AU)</option>
+                                <option value="+65">🇸🇬 +65 (SG)</option>
+                            </select>
+                            <i class="fa-solid fa-caret-down position-absolute" style="right: 10px; top: 50%; transform: translateY(-50%); color: #06b6d4; font-size: 1rem; pointer-events: none;"></i>
+                        </div>
+
+                        <input type="text" name="item_name" id="addDeviceNameInput" class="form-control-admin flex-grow-1"
                             placeholder="e.g. Android S23 Ultra" required>
+                            
                         <button type="submit" class="btn-action btn-action-primary px-4"><i
                                 class="fa-solid fa-plus"></i></button>
                     </form>
                 </div>
-                <div class="d-flex flex-wrap" style="padding: 30px !important; gap: 15px;">
-                    <?php foreach ($master_devices as $dev): ?>
-                        <div class="master-badge-item">
-                            <?php echo htmlspecialchars($dev['name']); ?>
-                            <form action="admin.php" method="POST" class="m-0" onsubmit="return confirm('Remove device?');">
-                                <input type="hidden" name="action" value="delete_master_device">
-                                <input type="hidden" name="id" value="<?php echo $dev['id']; ?>">
-                                <button type="submit" class="btn-remove" title="Remove"><i
-                                        class="fa-solid fa-xmark"></i></button>
-                            </form>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. MASTER USERS MANAGEMENT -->
-        <div class="col-lg-6" id="employees-section">
-            <div class="glass-card-admin">
-                <div class="card-header-admin"><i class="fa-solid fa-users text-violet-400"
-                        style="color: var(--accent-violet);"></i> Registered Employees</div>
-                <div class="border-bottom border-secondary"
-                    style="padding: 30px !important; border-color: var(--dark-border) !important;">
-                    <form action="admin.php" method="POST" class="d-flex flex-column gap-3">
-                        <input type="hidden" name="action" value="add_master_user">
-                        <div class="d-flex gap-3">
-                            <input type="text" name="item_name" class="form-control-admin w-100"
-                                placeholder="e.g. John Doe (Default Pass: 123456)" required>
-                            <input type="email" name="email" class="form-control-admin w-100"
-                                placeholder="Email Address (Optional)">
-                            <button type="submit" class="btn-action btn-action-primary px-4"><i
-                                    class="fa-solid fa-plus"></i></button>
-                        </div>
-                    </form>
-                </div>
-                <div class="table-responsive" style="padding: 15px;">
-                    <table class="table table-admin align-middle mb-0">
-                        <thead>
+                <div style="min-height: 600px; padding: 15px;">
+                    <table class="table table-admin align-middle mb-0" id="masterDevicesTable">
+                        <thead style="position: sticky; top: 0; background-color: #0f172a; z-index: 10;">
                             <tr>
-                                <th>Name</th>
-                                <th>Email</th>
-                                <th class="text-center">Actions</th>
+                                <th>Device Name</th>
+                                <th>Category</th>
+                                <th>Last Assigned To</th>
+                                <th class="text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($master_users as $usr): ?>
+                            <?php foreach ($master_devices as $dev): ?>
                                 <tr>
-                                    <td class="fw-bold text-adaptive" style="width: 30%;">
-                                        <?php echo htmlspecialchars($usr['name']); ?>
+                                    <td class="fw-bold text-adaptive"><?php echo htmlspecialchars($dev['name']); ?></td>
+                                    <td><span
+                                            class="badge bg-secondary"><?php echo htmlspecialchars($dev['category']); ?></span>
                                     </td>
-                                    <td style="width: 40%;">
-                                        <form action="admin.php" method="POST" class="m-0 d-flex gap-2"
-                                            onsubmit="return confirm('Update email?');">
-                                            <input type="hidden" name="action" value="update_master_user_email">
-                                            <input type="hidden" name="id" value="<?php echo $usr['id']; ?>">
-                                            <input type="email" name="email" class="form-control-admin"
-                                                style="font-size: 0.8rem; padding: 4px 8px;" placeholder="Email"
-                                                value="<?php echo htmlspecialchars($usr['email'] ?? ''); ?>">
-                                            <button type="submit" class="btn btn-sm btn-outline-success" title="Save Email">
-                                                <i class="fa-solid fa-save"></i>
-                                            </button>
-                                        </form>
+                                    <td style="font-size: 0.85rem;">
+                                        <?php if (!empty($dev['last_assigned_to'])): ?>
+                                            <div class="text-light fw-bold">
+                                                <?php echo htmlspecialchars($dev['last_assigned_to']); ?></div>
+                                            <div class="text-muted" style="font-size: 0.75rem;">
+                                                <?php echo htmlspecialchars($dev['last_assigned_date']); ?></div>
+                                        <?php else: ?>
+                                            <span class="text-muted">Never</span>
+                                        <?php endif; ?>
                                     </td>
-                                    <td class="text-center" style="width: 30%;">
+                                    <td class="text-center">
                                         <div class="d-flex justify-content-center gap-2">
+                                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editDeviceModal<?php echo $dev['id']; ?>" title="Edit">
+                                                <i class="fa-solid fa-pen-to-square"></i>
+                                            </button>
                                             <form action="admin.php" method="POST" class="m-0"
-                                                onsubmit="return confirm('Reset password to 123456?');">
-                                                <input type="hidden" name="action" value="reset_master_user_password">
-                                                <input type="hidden" name="id" value="<?php echo $usr['id']; ?>">
-                                                <button type="submit" class="btn btn-sm btn-outline-warning"
-                                                    title="Reset Password">
-                                                    <i class="fa-solid fa-key"></i> Reset
-                                                </button>
+                                                onsubmit="return confirm('Remove device?');">
+                                                <input type="hidden" name="action" value="delete_master_device">
+                                                <input type="hidden" name="id" value="<?php echo $dev['id']; ?>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove"><i
+                                                        class="fa-solid fa-trash"></i></button>
                                             </form>
-                                            <form action="admin.php" method="POST" class="m-0"
-                                                onsubmit="return confirm('Remove user?');">
-                                                <input type="hidden" name="action" value="delete_master_user">
-                                                <input type="hidden" name="id" value="<?php echo $usr['id']; ?>">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove">
-                                                    <i class="fa-solid fa-xmark"></i>
-                                                </button>
-                                            </form>
+                                        </div>
+
+                                        <!-- Edit Modal -->
+                                        <div class="modal fade" id="editDeviceModal<?php echo $dev['id']; ?>" tabindex="-1" aria-hidden="true">
+                                            <div class="modal-dialog modal-dialog-centered">
+                                                <div class="modal-content" style="background-color: var(--card-bg); border: 1px solid var(--dark-border);">
+                                                    <form action="admin.php" method="POST">
+                                                        <input type="hidden" name="action" value="edit_master_device">
+                                                        <input type="hidden" name="id" value="<?php echo $dev['id']; ?>">
+                                                        <div class="modal-header border-bottom border-secondary">
+                                                            <h5 class="modal-title text-light">Edit Device</h5>
+                                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                        </div>
+                                                        <div class="modal-body text-start">
+                                                            <div class="mb-3">
+                                                                <label class="form-label text-light">Category</label>
+                                                                <select name="category" class="form-select" required onchange="togglePhoneValidation(this.value, 'editCountryCodeWrapper<?php echo $dev['id']; ?>', 'editDeviceNameInput<?php echo $dev['id']; ?>')">
+                                                                    <?php
+                                                                    $categories = ['Android', 'iPhone', 'Laptop', 'External HD', 'Headphone', 'Phone No', 'Other'];
+                                                                    foreach($categories as $cat) {
+                                                                        $selected = ($dev['category'] == $cat) ? 'selected' : '';
+                                                                        echo "<option value=\"$cat\" $selected>$cat</option>";
+                                                                    }
+                                                                    ?>
+                                                                </select>
+                                                            </div>
+                                                            <?php
+                                                            $is_phone = ($dev['category'] === 'Phone No');
+                                                            $cc = '+91';
+                                                            $num = $dev['name'];
+                                                            if ($is_phone && preg_match('/^(\+\d+)\s+(.+)$/', $dev['name'], $matches)) {
+                                                                $cc = $matches[1];
+                                                                $num = $matches[2];
+                                                            }
+                                                            ?>
+                                                            <div class="mb-3 d-flex gap-2">
+                                                                <div id="editCountryCodeWrapper<?php echo $dev['id']; ?>" style="display: <?php echo $is_phone ? 'block' : 'none'; ?>; width: 140px;">
+                                                                    <label class="form-label text-light">Code</label>
+                                                                    <select name="country_code" class="form-select">
+                                                                        <option value="+91" <?php echo $cc === '+91' ? 'selected' : ''; ?>>🇮🇳 +91 (IN)</option>
+                                                                        <option value="+1" <?php echo $cc === '+1' ? 'selected' : ''; ?>>🇺🇸 +1 (US)</option>
+                                                                        <option value="+44" <?php echo $cc === '+44' ? 'selected' : ''; ?>>🇬🇧 +44 (UK)</option>
+                                                                        <option value="+971" <?php echo $cc === '+971' ? 'selected' : ''; ?>>🇦🇪 +971 (AE)</option>
+                                                                        <option value="+61" <?php echo $cc === '+61' ? 'selected' : ''; ?>>🇦🇺 +61 (AU)</option>
+                                                                        <option value="+65" <?php echo $cc === '+65' ? 'selected' : ''; ?>>🇸🇬 +65 (SG)</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div class="flex-grow-1">
+                                                                    <label class="form-label text-light">Device / Phone Name</label>
+                                                                    <input type="text" name="item_name" id="editDeviceNameInput<?php echo $dev['id']; ?>" class="form-control" value="<?php echo htmlspecialchars($num); ?>" required 
+                                                                    <?php if($is_phone): ?>
+                                                                        maxlength="10" minlength="10" oninput="this.value = this.value.replace(/[^0-9]/g, '');" placeholder="Enter 10-digit Phone No"
+                                                                    <?php else: ?>
+                                                                        placeholder="e.g. Android S23 Ultra"
+                                                                    <?php endif; ?>
+                                                                    >
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="modal-footer border-top border-secondary">
+                                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                                                        </div>
+                                                    </form>
+                                                </div>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -338,22 +466,22 @@ $allocations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </table>
                 </div>
 
-                <!-- Pagination Controls for Users -->
-                <?php if ($total_user_pages > 1): ?>
+                <!-- Pagination Controls for Devices -->
+                <?php if ($total_device_pages > 1): ?>
                     <div class="d-flex justify-content-between align-items-center mt-3 px-4 pb-4">
                         <div class="text-muted small">
-                            Showing page <?php echo $current_user_page; ?> of <?php echo $total_user_pages; ?>
+                            Showing page <?php echo $current_device_page; ?> of <?php echo $total_device_pages; ?>
                         </div>
                         <div class="btn-group">
-                            <?php if ($current_user_page > 1): ?>
-                                <a href="?user_page=<?php echo $current_user_page - 1; ?>&view_date=<?php echo htmlspecialchars($view_date); ?>#employees-section"
+                            <?php if ($current_device_page > 1): ?>
+                                <a href="?device_page=<?php echo $current_device_page - 1; ?>"
                                     class="btn btn-sm btn-outline-secondary">Previous</a>
                             <?php else: ?>
                                 <button class="btn btn-sm btn-outline-secondary" disabled>Previous</button>
                             <?php endif; ?>
 
-                            <?php if ($current_user_page < $total_user_pages): ?>
-                                <a href="?user_page=<?php echo $current_user_page + 1; ?>&view_date=<?php echo htmlspecialchars($view_date); ?>#employees-section"
+                            <?php if ($current_device_page < $total_device_pages): ?>
+                                <a href="?device_page=<?php echo $current_device_page + 1; ?>"
                                     class="btn btn-sm btn-outline-secondary">Next</a>
                             <?php else: ?>
                                 <button class="btn btn-sm btn-outline-secondary" disabled>Next</button>
@@ -363,13 +491,16 @@ $allocations = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <?php endif; ?>
             </div>
         </div>
-    </div>
+
+
+
+        <!-- 3. MASTER PHONE NUMBERS LIST -->
 
     <!-- 4. EDIT LOGS (WITH DATE FILTER) -->
     <div class="glass-card-admin">
         <div class="card-header-admin text-light d-flex flex-wrap justify-content-between align-items-center gap-3">
             <div>
-                <i class="fa-solid fa-pen-to-square text-danger"></i> Edit Logs (Emergency)
+                <i class="fa-solid fa-pen-to-square text-danger"></i> Logs (Emergency)
             </div>
             <div class="d-flex flex-row align-items-center gap-3">
                 <form action="admin.php" method="GET" class="d-flex m-0 align-items-center rounded px-3 py-1"
@@ -534,6 +665,65 @@ $allocations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         rows.forEach(row => tbody.appendChild(row));
     }
+
+    // Simple table filter
+    function filterTable(inputId, tableId) {
+        let input = document.getElementById(inputId);
+        let filter = input.value.toLowerCase();
+        let table = document.getElementById(tableId);
+        let tr = table.getElementsByTagName("tr");
+
+        for (let i = 1; i < tr.length; i++) {
+            let rowText = tr[i].textContent || tr[i].innerText;
+            if (rowText.indexOf(filter) > -1) {
+                tr[i].style.display = "";
+            } else {
+                tr[i].style.display = "none";
+            }
+        }
+    }
+    
+    function togglePhoneValidation(category, countryCodeId, inputId) {
+        const countryCodeWrapper = document.getElementById(countryCodeId);
+        const input = document.getElementById(inputId);
+        
+        if (category === 'Phone No') {
+            countryCodeWrapper.style.display = 'block';
+            input.placeholder = 'Enter 10-digit Phone No';
+            input.setAttribute('maxlength', '10');
+            input.setAttribute('minlength', '10');
+            if(input.value === 'iPhone ') input.value = '';
+            input.oninput = function() {
+                this.value = this.value.replace(/[^0-9]/g, '');
+            };
+        } else {
+            countryCodeWrapper.style.display = 'none';
+            input.placeholder = 'e.g. Android S23 Ultra';
+            input.removeAttribute('maxlength');
+            input.removeAttribute('minlength');
+            input.oninput = null;
+            
+            if (category === 'iPhone') {
+                if (input.value.trim() === '' || input.value.trim() === 'iPhone') {
+                    input.value = 'iPhone ';
+                }
+            } else {
+                if (input.value.trim() === 'iPhone') {
+                    input.value = '';
+                }
+            }
+        }
+    }
+
+    // Preserve scroll position across page reloads
+    document.addEventListener("DOMContentLoaded", function (event) {
+        var scrollpos = localStorage.getItem('scrollpos');
+        if (scrollpos) window.scrollTo(0, scrollpos);
+    });
+
+    window.onbeforeunload = function (e) {
+        localStorage.setItem('scrollpos', window.scrollY);
+    };
 </script>
 
 <?php require_once 'footer.php'; ?>

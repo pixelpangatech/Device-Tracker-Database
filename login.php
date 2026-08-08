@@ -44,20 +44,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user_name = $_POST['user_name'] ?? '';
         $password = $_POST['user_password'] ?? '';
         
-        $stmt = $pdo->prepare("SELECT name, password FROM master_users WHERE name = ?");
+        $stmt = $pdo->prepare("SELECT name, password, is_admin FROM master_users WHERE name = ?");
         $stmt->execute([$user_name]);
         $user = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($user) {
             if ($user['password'] !== null && password_verify($password, $user['password'])) {
-                $_SESSION['role'] = 'user';
+                $_SESSION['role'] = $user['is_admin'] ? 'admin' : 'user';
                 $_SESSION['user_name'] = $user_name;
+                if ($user['is_admin']) {
+                    $_SESSION['is_admin_logged_in'] = true;
+                }
                 
                 if ($password === '123456') {
                     $_SESSION['must_change_password'] = true;
                     header("Location: change_password.php");
                 } else {
-                    header("Location: index.php");
+                    if ($user['is_admin']) {
+                        header("Location: admin.php");
+                    } else {
+                        header("Location: index.php");
+                    }
                 }
                 exit();
             } else {
@@ -78,7 +85,7 @@ $users = $stmt->fetchAll(PDO::FETCH_COLUMN);
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gateway - Device Tracker</title>
+    <title>Gateway - TechVault</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">

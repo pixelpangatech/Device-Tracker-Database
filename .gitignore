@@ -1,0 +1,12 @@
+# Database files
+tracker.db
+*.sqlite
+*.db
+*.db-journal
+
+# Backups
+backup_data/
+
+# OS generated files
+.DS_Store
+Thumbs.db
