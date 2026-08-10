@@ -79,7 +79,7 @@ $total_users_stmt = $pdo->query("SELECT COUNT(*) FROM master_users");
 $total_users = (int) $total_users_stmt->fetchColumn();
 $total_user_pages = ceil($total_users / $users_per_page);
 
-$stmt = $pdo->prepare("SELECT id, name, email, is_admin FROM master_users ORDER BY name ASC LIMIT ? OFFSET ?");
+$stmt = $pdo->prepare("SELECT id, name, email FROM master_users ORDER BY name ASC LIMIT ? OFFSET ?");
 $stmt->bindValue(1, $users_per_page, PDO::PARAM_INT);
 $stmt->bindValue(2, $user_offset, PDO::PARAM_INT);
 $stmt->execute();
